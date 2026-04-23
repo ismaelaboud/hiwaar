@@ -1000,7 +1000,7 @@ function renderFeed() {
         ${resultHtml}
         ${q.answered ? `<div class="already-answered">Answered by ${q.targetName}</div>` : ''}
         <div class="quiz-actions">
-          <button class="edit-btn" onclick="editQuiz('${q._id}')" title="Edit this question">✏️ Edit</button>
+          ${q.answered ? '' : `<button class="edit-btn" onclick="editQuiz('${q._id}')" title="Edit this question">✏️ Edit</button>`}
           <button class="delete-btn" onclick="deleteQuiz('${q._id}')" title="Delete this question">🗑️ Delete</button>
         </div>
       </div>`;
