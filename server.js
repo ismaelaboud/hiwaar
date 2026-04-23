@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const Quiz = require('./models/Quiz');
+const Score = require('./models/Score');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -158,6 +159,78 @@ app.delete('/quizzes/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting quiz:', error);
     res.status(500).json({ error: 'Failed to delete quiz' });
+  }
+});
+
+// ===== SCORE API ENDPOINTS =====
+
+// GET /scores - Fetch all player scores
+app.get('/scores', async (req, res) => {
+  try {
+    const scores = await Score.find().sort({ playerNumber: 1 });
+    res.json(scores);
+  } catch (error) {
+    console.error('Error fetching scores:', error);
+    res.status(500).json({ error: 'Failed to fetch scores' });
+  }
+});
+
+// POST /scores - Initialize or update player scores
+app.post('/scores', async (req, res) => {
+  try {
+    const { playerNumber, playerName, correctAnswers, wrongAnswers } = req.body;
+
+    // Validation
+    if (!playerNumber || !playerName) {
+      return res.status(400).json({ error: 'Player number and name are required' });
+    }
+
+    if (playerNumber < 1 || playerNumber > 2) {
+      return res.status(400).json({ error: 'Player number must be 1 or 2' });
+    }
+
+    // Use findOneAndUpdate with upsert to create or update
+    const score = await Score.findOneAndUpdate(
+      { playerNumber },
+      {
+        playerName,
+        correctAnswers: correctAnswers || 0,
+        wrongAnswers: wrongAnswers || 0
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json(score);
+  } catch (error) {
+    console.error('Error updating score:', error);
+    res.status(500).json({ error: 'Failed to update score' });
+  }
+});
+
+// PATCH /scores/:playerNumber - Update a specific player's score
+app.patch('/scores/:playerNumber', async (req, res) => {
+  try {
+    const { correctAnswers, wrongAnswers } = req.body;
+    const playerNumber = parseInt(req.params.playerNumber);
+
+    if (playerNumber < 1 || playerNumber > 2) {
+      return res.status(400).json({ error: 'Player number must be 1 or 2' });
+    }
+
+    const score = await Score.findOneAndUpdate(
+      { playerNumber },
+      { correctAnswers, wrongAnswers },
+      { new: true }
+    );
+
+    if (!score) {
+      return res.status(404).json({ error: 'Score not found for this player' });
+    }
+
+    res.json(score);
+  } catch (error) {
+    console.error('Error updating score:', error);
+    res.status(500).json({ error: 'Failed to update score' });
   }
 });
 

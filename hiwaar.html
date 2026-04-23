@@ -629,6 +629,82 @@ async function updateQuizAnswer(quizId, chosenIndex) {
   }
 }
 
+// ===== SCORE API FUNCTIONS =====
+async function fetchScores() {
+  try {
+    const response = await fetch(`${API_BASE}/scores`);
+    if (!response.ok) throw new Error('Failed to fetch scores');
+    const scores = await response.json();
+    return scores;
+  } catch (error) {
+    console.error('Error fetching scores:', error);
+    return [];
+  }
+}
+
+async function updatePlayerScore(playerNumber, correctAnswers, wrongAnswers) {
+  try {
+    const response = await fetch(`${API_BASE}/scores/${playerNumber}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ correctAnswers, wrongAnswers })
+    });
+    
+    if (!response.ok) throw new Error('Failed to update score');
+    
+    const updatedScore = await response.json();
+    return updatedScore;
+  } catch (error) {
+    console.error('Error updating player score:', error);
+    throw error;
+  }
+}
+
+async function initializePlayerScores() {
+  try {
+    const p1Name = document.getElementById('name-p1').textContent;
+    const p2Name = document.getElementById('name-p2').textContent;
+    
+    // Initialize Player 1
+    await fetch(`${API_BASE}/scores`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerNumber: 1,
+        playerName: p1Name,
+        correctAnswers: 0,
+        wrongAnswers: 0
+      })
+    });
+    
+    // Initialize Player 2
+    await fetch(`${API_BASE}/scores`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerNumber: 2,
+        playerName: p2Name,
+        correctAnswers: 0,
+        wrongAnswers: 0
+      })
+    });
+  } catch (error) {
+    console.error('Error initializing player scores:', error);
+  }
+}
+
+function loadScoresIntoUI(scores) {
+  scores.forEach(score => {
+    const correctEl = document.getElementById(`correct-p${score.playerNumber}`);
+    const wrongEl = document.getElementById(`wrong-p${score.playerNumber}`);
+    
+    if (correctEl) correctEl.textContent = score.correctAnswers;
+    if (wrongEl) wrongEl.textContent = score.wrongAnswers;
+  });
+}
+
 const CELEBRATE_MSGS = [
   "🎉 MashaAllah MashaAllah Twayyib ya Hayaty!",
   "🥰 Hayaty Booosah zangu!",
@@ -774,29 +850,43 @@ async function answer(id, chosenIdx) {
   try {
     const updatedQuiz = await updateQuizAnswer(id, chosenIdx);
     
-    // Update scores
+    // Update scores and save to database
     const target = updatedQuiz.targetPlayer;
     console.log('Updating scores for player:', target);
     console.log('Answered correct:', updatedQuiz.answeredCorrect);
     
+    // Get current scores from UI
+    const correctEl = document.getElementById(`correct-p${target}`);
+    const wrongEl = document.getElementById(`wrong-p${target}`);
+    
+    let currentCorrect = 0;
+    let currentWrong = 0;
+    
+    if (correctEl) currentCorrect = parseInt(correctEl.textContent);
+    if (wrongEl) currentWrong = parseInt(wrongEl.textContent);
+    
     if (updatedQuiz.answeredCorrect) {
-      const el = document.getElementById(`correct-p${target}`);
-      console.log('Correct score element found:', el);
-      if (el) {
-        const currentScore = parseInt(el.textContent);
-        el.textContent = currentScore + 1;
-        console.log('Updated correct score to:', currentScore + 1);
+      currentCorrect++;
+      if (correctEl) {
+        correctEl.textContent = currentCorrect;
+        console.log('Updated correct score to:', currentCorrect);
       }
       showModal(true, updatedQuiz.targetName);
     } else {
-      const el = document.getElementById(`wrong-p${target}`);
-      console.log('Wrong score element found:', el);
-      if (el) {
-        const currentScore = parseInt(el.textContent);
-        el.textContent = currentScore + 1;
-        console.log('Updated wrong score to:', currentScore + 1);
+      currentWrong++;
+      if (wrongEl) {
+        wrongEl.textContent = currentWrong;
+        console.log('Updated wrong score to:', currentWrong);
       }
       showModal(false, updatedQuiz.targetName);
+    }
+    
+    // Save updated scores to database
+    try {
+      await updatePlayerScore(target, currentCorrect, currentWrong);
+      console.log('Scores saved to database for player', target);
+    } catch (error) {
+      console.error('Failed to save scores to database:', error);
     }
 
     renderFeed();
@@ -869,9 +959,28 @@ function launchConfetti() {
 }
 
 // ===== INITIALIZE APP =====
-// Load quizzes from server when page loads
-document.addEventListener('DOMContentLoaded', () => {
-  fetchQuizzes();
+// Load quizzes and scores from server when page loads
+document.addEventListener('DOMContentLoaded', async () => {
+  // Load quizzes
+  await fetchQuizzes();
+  
+  // Load scores from database
+  try {
+    const scores = await fetchScores();
+    if (scores.length === 0) {
+      // Initialize scores if none exist
+      await initializePlayerScores();
+      console.log('Initialized player scores');
+    } else {
+      // Load existing scores into UI
+      loadScoresIntoUI(scores);
+      console.log('Loaded scores from database:', scores);
+    }
+  } catch (error) {
+    console.error('Error loading scores:', error);
+    // Initialize scores as fallback
+    await initializePlayerScores();
+  }
 });
 </script>
 </body>
