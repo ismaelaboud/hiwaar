@@ -16,9 +16,36 @@ app.use(express.static('.')); // Serve static files from current directory
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
+console.log('Attempting to connect to MongoDB with URI:', MONGODB_URI.replace(/:([^@]+)@/, ':***@')); // Hide password in logs
+
+if (!MONGODB_URI) {
+  console.error('MONGODB_URI environment variable is not set');
+  process.exit(1);
+}
+
+mongoose.connect(MONGODB_URI, {
+  serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+  socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+})
   .then(() => console.log('Connected to MongoDB successfully'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.error('Please check your MongoDB connection string in .env file');
+    process.exit(1);
+  });
+
+// Handle connection errors after initial connection
+mongoose.connection.on('error', err => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected');
+});
 
 // API Routes
 
