@@ -616,7 +616,7 @@ async function updateQuizAnswer(quizId, chosenIndex) {
     const updatedQuiz = await response.json();
     
     // Update local quiz data
-    const quizIndex = quizzes.findIndex(q => q._id === quizId);
+    const quizIndex = quizzes.findIndex(q => q._id.toString() === quizId);
     if (quizIndex !== -1) {
       quizzes[quizIndex] = updatedQuiz;
     }
@@ -776,13 +776,26 @@ async function answer(id, chosenIdx) {
     
     // Update scores
     const target = updatedQuiz.targetPlayer;
+    console.log('Updating scores for player:', target);
+    console.log('Answered correct:', updatedQuiz.answeredCorrect);
+    
     if (updatedQuiz.answeredCorrect) {
       const el = document.getElementById(`correct-p${target}`);
-      el.textContent = parseInt(el.textContent) + 1;
+      console.log('Correct score element found:', el);
+      if (el) {
+        const currentScore = parseInt(el.textContent);
+        el.textContent = currentScore + 1;
+        console.log('Updated correct score to:', currentScore + 1);
+      }
       showModal(true, updatedQuiz.targetName);
     } else {
       const el = document.getElementById(`wrong-p${target}`);
-      el.textContent = parseInt(el.textContent) + 1;
+      console.log('Wrong score element found:', el);
+      if (el) {
+        const currentScore = parseInt(el.textContent);
+        el.textContent = currentScore + 1;
+        console.log('Updated wrong score to:', currentScore + 1);
+      }
       showModal(false, updatedQuiz.targetName);
     }
 
