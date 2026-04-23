@@ -1,0 +1,159 @@
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const path = require('path');
+const Quiz = require('./models/Quiz');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('.')); // Serve static files from current directory
+
+// MongoDB Connection
+const MONGODB_URI = process.env.MONGODB_URI;
+
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// API Routes
+
+// GET /quizzes - Fetch all quizzes
+app.get('/quizzes', async (req, res) => {
+  try {
+    const quizzes = await Quiz.find().sort({ createdAt: -1 });
+    res.json(quizzes);
+  } catch (error) {
+    console.error('Error fetching quizzes:', error);
+    res.status(500).json({ error: 'Failed to fetch quizzes' });
+  }
+});
+
+// POST /quizzes - Add a new quiz
+app.post('/quizzes', async (req, res) => {
+  try {
+    const {
+      asker,
+      askerName,
+      targetName,
+      targetPlayer,
+      question,
+      options,
+      correct,
+      time
+    } = req.body;
+
+    // Validation
+    if (!asker || !askerName || !targetName || !targetPlayer || !question || !options || correct === undefined || !time) {
+      return res.status(400).json({ error: 'All required fields must be provided' });
+    }
+
+    if (options.length < 2 || options.length > 4) {
+      return res.status(400).json({ error: 'Quiz must have between 2 and 4 options' });
+    }
+
+    if (correct < 0 || correct >= options.length) {
+      return res.status(400).json({ error: 'Correct answer index must be within options bounds' });
+    }
+
+    const newQuiz = new Quiz({
+      asker,
+      askerName,
+      targetName,
+      targetPlayer,
+      question,
+      options,
+      correct,
+      time,
+      answered: false,
+      answeredCorrect: false,
+      chosen: null
+    });
+
+    const savedQuiz = await newQuiz.save();
+    res.status(201).json(savedQuiz);
+  } catch (error) {
+    console.error('Error creating quiz:', error);
+    res.status(500).json({ error: 'Failed to create quiz' });
+  }
+});
+
+// PATCH /quizzes/:id - Update quiz answer
+app.patch('/quizzes/:id', async (req, res) => {
+  try {
+    const { chosen } = req.body;
+    
+    if (chosen === undefined) {
+      return res.status(400).json({ error: 'Chosen answer index is required' });
+    }
+
+    const quiz = await Quiz.findById(req.params.id);
+    
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    if (quiz.answered) {
+      return res.status(400).json({ error: 'Quiz has already been answered' });
+    }
+
+    if (chosen < 0 || chosen >= quiz.options.length) {
+      return res.status(400).json({ error: 'Invalid answer choice' });
+    }
+
+    // Update quiz with answer
+    quiz.answered = true;
+    quiz.chosen = chosen;
+    quiz.answeredCorrect = chosen === quiz.correct;
+
+    const updatedQuiz = await quiz.save();
+    res.json(updatedQuiz);
+  } catch (error) {
+    console.error('Error updating quiz:', error);
+    res.status(500).json({ error: 'Failed to update quiz' });
+  }
+});
+
+// DELETE /quizzes/:id - Delete a quiz (optional utility)
+app.delete('/quizzes/:id', async (req, res) => {
+  try {
+    const quiz = await Quiz.findByIdAndDelete(req.params.id);
+    
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    res.json({ message: 'Quiz deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    res.status(500).json({ error: 'Failed to delete quiz' });
+  }
+});
+
+// Serve the main HTML file for all other routes
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'hiwaar.html'));
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Love Quiz server running on http://localhost:${PORT}`);
+  console.log(`📱 Frontend available at http://localhost:${PORT}`);
+  console.log(`🔗 API endpoints:`);
+  console.log(`   GET  /quizzes - Fetch all quizzes`);
+  console.log(`   POST /quizzes - Create new quiz`);
+  console.log(`   PATCH /quizzes/:id - Update quiz answer`);
+  console.log(`   DELETE /quizzes/:id - Delete quiz`);
+});
+
+module.exports = app;
