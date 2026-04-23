@@ -110,6 +110,59 @@ app.post('/quizzes', async (req, res) => {
   }
 });
 
+// PUT /quizzes/:id - Update a quiz
+app.put('/quizzes/:id', async (req, res) => {
+  try {
+    const {
+      asker,
+      askerName,
+      targetName,
+      targetPlayer,
+      question,
+      options,
+      correct,
+      time
+    } = req.body;
+
+    // Validation
+    if (!asker || !askerName || !targetName || !targetPlayer || !question || !options || correct === undefined || !time) {
+      return res.status(400).json({ error: 'All required fields must be provided' });
+    }
+
+    if (options.length < 2 || options.length > 4) {
+      return res.status(400).json({ error: 'Quiz must have between 2 and 4 options' });
+    }
+
+    if (correct < 0 || correct >= options.length) {
+      return res.status(400).json({ error: 'Correct answer index must be within options bounds' });
+    }
+
+    const updatedQuiz = await Quiz.findByIdAndUpdate(
+      req.params.id,
+      {
+        asker,
+        askerName,
+        targetName,
+        targetPlayer,
+        question,
+        options,
+        correct,
+        time
+      },
+      { new: true }
+    );
+
+    if (!updatedQuiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    res.json(updatedQuiz);
+  } catch (error) {
+    console.error('Error updating quiz:', error);
+    res.status(500).json({ error: 'Failed to update quiz' });
+  }
+});
+
 // PATCH /quizzes/:id - Update quiz answer
 app.patch('/quizzes/:id', async (req, res) => {
   try {

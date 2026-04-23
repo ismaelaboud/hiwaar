@@ -379,6 +379,46 @@
     font-style: italic;
   }
 
+  .quiz-actions {
+    margin-top: 12px;
+    text-align: right;
+  }
+
+  .delete-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #ff4444;
+    background: transparent;
+    color: #ff6666;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .delete-btn:hover {
+    border-color: #ff0000;
+    color: #ff0000;
+    background: #ff000015;
+  }
+
+  .edit-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #4CAF50;
+    background: transparent;
+    color: #4CAF50;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+  }
+
+  .edit-btn:hover {
+    border-color: #45a049;
+    color: #45a049;
+    background: #4CAF5015;
+  }
+
   /* Confetti overlay */
   #confetti-canvas {
     position: fixed;
@@ -705,6 +745,129 @@ function loadScoresIntoUI(scores) {
   });
 }
 
+// ===== EDIT QUIZ =====
+async function editQuiz(quizId) {
+  const quiz = quizzes.find(q => q._id.toString() === quizId);
+  if (!quiz) {
+    console.error('Quiz not found for editing');
+    return;
+  }
+  
+  // Populate form with existing data
+  document.getElementById('q-text').value = quiz.question;
+  document.getElementById('opt-a').value = quiz.options[0] || '';
+  document.getElementById('opt-b').value = quiz.options[1] || '';
+  document.getElementById('opt-c').value = quiz.options[2] || '';
+  document.getElementById('opt-d').value = quiz.options[3] || '';
+  
+  // Select correct answer
+  selectCorrect(quiz.correct);
+  
+  // Set asker
+  setAsker(quiz.asker);
+  
+  // Scroll to form
+  document.querySelector('.add-section').scrollIntoView({ behavior: 'smooth' });
+  
+  // Change post button to update button
+  const postBtn = document.querySelector('.post-btn');
+  postBtn.textContent = '🔄 Update Question';
+  postBtn.onclick = updateExistingQuiz;
+}
+
+// ===== UPDATE EXISTING QUIZ =====
+async function updateExistingQuiz() {
+  const qText = document.getElementById('q-text').value.trim();
+  const opts = [
+    document.getElementById('opt-a').value.trim(),
+    document.getElementById('opt-b').value.trim(),
+    document.getElementById('opt-c').value.trim(),
+    document.getElementById('opt-d').value.trim(),
+  ].filter(o => o !== '');
+
+  if (!qText) { alert('Please type a question!'); return; }
+  if (opts.length < 2) { alert('Add at least 2 answer options!'); return; }
+  if (correctAnswer < 0 || correctAnswer >= opts.length) { alert('Select the correct answer!'); return; }
+
+  // Find the quiz being edited (first one in array that matches current asker)
+  const editingQuiz = quizzes.find(q => q.asker === currentAsker && !q.answered);
+  if (!editingQuiz) {
+    alert('No unanswered question found for current player to edit!');
+    return;
+  }
+
+  const quizData = {
+    asker: currentAsker,
+    askerName: document.getElementById(`name-p${currentAsker}`).textContent,
+    targetName: document.getElementById(`name-p${currentAsker === 1 ? 2 : 1}`).textContent,
+    targetPlayer: currentAsker === 1 ? 2 : 1,
+    question: qText,
+    options: opts,
+    correct: correctAnswer,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+
+  try {
+    const response = await fetch(`${API_BASE}/quizzes/${editingQuiz._id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(quizData)
+    });
+    
+    if (!response.ok) throw new Error('Failed to update quiz');
+    
+    const updatedQuiz = await response.json();
+    
+    // Update local array
+    const quizIndex = quizzes.findIndex(q => q._id.toString() === editingQuiz._id);
+    if (quizIndex !== -1) {
+      quizzes[quizIndex] = updatedQuiz;
+    }
+    
+    renderFeed();
+    clearForm();
+    
+    // Reset button back to post mode
+    const postBtn = document.querySelector('.post-btn');
+    postBtn.textContent = '💌 Post Question';
+    postBtn.onclick = postQuestion;
+    
+    console.log('Quiz updated successfully');
+  } catch (error) {
+    console.error('Failed to update quiz:', error);
+    alert('Failed to update question. Please try again.');
+  }
+}
+
+// ===== DELETE QUIZ =====
+async function deleteQuiz(quizId) {
+  if (!confirm('Are you sure you want to delete this question? This cannot be undone!')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE}/quizzes/${quizId}`, {
+      method: 'DELETE'
+    });
+    
+    if (!response.ok) throw new Error('Failed to delete quiz');
+    
+    // Remove from local array
+    const quizIndex = quizzes.findIndex(q => q._id.toString() === quizId);
+    if (quizIndex !== -1) {
+      quizzes.splice(quizIndex, 1);
+    }
+    
+    renderFeed();
+    console.log('Quiz deleted successfully');
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    alert('Failed to delete question. Please try again.');
+  }
+}
+
 const CELEBRATE_MSGS = [
   "🎉 MashaAllah MashaAllah Twayyib ya Hayaty!",
   "🥰 Hayaty Booosah zangu!",
@@ -836,6 +999,10 @@ function renderFeed() {
         <div class="answer-options">${optionsHtml}</div>
         ${resultHtml}
         ${q.answered ? `<div class="already-answered">Answered by ${q.targetName}</div>` : ''}
+        <div class="quiz-actions">
+          <button class="edit-btn" onclick="editQuiz('${q._id}')" title="Edit this question">✏️ Edit</button>
+          <button class="delete-btn" onclick="deleteQuiz('${q._id}')" title="Delete this question">🗑️ Delete</button>
+        </div>
       </div>`;
   }).join('');
 }
