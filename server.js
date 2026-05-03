@@ -61,6 +61,41 @@ app.get('/quizzes', async (req, res) => {
   }
 });
 
+// GET /quizzes/filter - Fetch filtered quizzes based on user
+app.get('/quizzes/filter', async (req, res) => {
+  try {
+    const { playerNumber, filter } = req.query;
+    
+    // Validate parameters
+    if (!playerNumber || !filter) {
+      return res.status(400).json({ error: 'playerNumber and filter parameters are required' });
+    }
+    
+    const playerNum = parseInt(playerNumber);
+    if (playerNum < 1 || playerNum > 2) {
+      return res.status(400).json({ error: 'playerNumber must be 1 or 2' });
+    }
+    
+    let query = {};
+    
+    if (filter === 'asked') {
+      // Questions asked by this player
+      query.asker = playerNum;
+    } else if (filter === 'received') {
+      // Questions asked for this player (targeted to them)
+      query.targetPlayer = playerNum;
+    } else {
+      return res.status(400).json({ error: 'filter must be either "asked" or "received"' });
+    }
+    
+    const quizzes = await Quiz.find(query).sort({ createdAt: -1 });
+    res.json(quizzes);
+  } catch (error) {
+    console.error('Error fetching filtered quizzes:', error);
+    res.status(500).json({ error: 'Failed to fetch filtered quizzes' });
+  }
+});
+
 // POST /quizzes - Add a new quiz
 app.post('/quizzes', async (req, res) => {
   try {
@@ -304,6 +339,7 @@ app.listen(PORT, () => {
   console.log(`📱 Frontend available at http://localhost:${PORT}`);
   console.log(`🔗 API endpoints:`);
   console.log(`   GET  /quizzes - Fetch all quizzes`);
+  console.log(`   GET  /quizzes/filter - Fetch filtered quizzes`);
   console.log(`   POST /quizzes - Create new quiz`);
   console.log(`   PATCH /quizzes/:id - Update quiz answer`);
   console.log(`   DELETE /quizzes/:id - Delete quiz`);

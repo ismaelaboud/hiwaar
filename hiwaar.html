@@ -594,9 +594,19 @@
     <button class="post-btn" onclick="postQuestion()">💌 Post Question</button>
   </div>
 
+  <!-- Filter Toggle -->
+  <div class="toggle-section">
+    <div class="toggle-label">View Questions</div>
+    <div class="toggle-btns">
+      <button class="toggle-btn active" id="filter-all" onclick="setFilter('all')">📋 All Questions</button>
+      <button class="toggle-btn" id="filter-asked" onclick="setFilter('asked')">✍️ My Questions</button>
+      <button class="toggle-btn" id="filter-received" onclick="setFilter('received')">🎯 Questions for Me</button>
+    </div>
+  </div>
+
   <!-- Quiz Feed -->
   <div class="feed-section">
-    <div class="feed-title"><span>💬</span> Quiz Feed</div>
+    <div class="feed-title"><span>💬</span> <span id="feed-title-text">Quiz Feed</span></div>
     <div id="feed">
       <div class="empty-feed">
         <div class="big">💕</div>
@@ -611,6 +621,8 @@
 let currentAsker = 1;
 let correctAnswer = -1;
 let quizzes = [];
+let currentUser = 1; // Currently logged-in user
+let currentFilter = 'all'; // Current filter: 'all', 'asked', 'received'
 
 // ===== API FUNCTIONS =====
 const API_BASE = ''; // Same origin since frontend and backend are served together
@@ -623,6 +635,20 @@ async function fetchQuizzes() {
     renderFeed();
   } catch (error) {
     console.error('Error fetching quizzes:', error);
+    // Fallback to empty array if API fails
+    quizzes = [];
+    renderFeed();
+  }
+}
+
+async function fetchFilteredQuizzes(playerNumber, filter) {
+  try {
+    const response = await fetch(`${API_BASE}/quizzes/filter?playerNumber=${playerNumber}&filter=${filter}`);
+    if (!response.ok) throw new Error('Failed to fetch filtered quizzes');
+    quizzes = await response.json();
+    renderFeed();
+  } catch (error) {
+    console.error('Error fetching filtered quizzes:', error);
     // Fallback to empty array if API fails
     quizzes = [];
     renderFeed();
@@ -642,8 +668,14 @@ async function createQuiz(quizData) {
     if (!response.ok) throw new Error('Failed to create quiz');
     
     const newQuiz = await response.json();
-    quizzes.unshift(newQuiz);
-    renderFeed();
+    
+    // Refresh feed with current filter to show the new quiz if it matches
+    if (currentFilter === 'all') {
+      fetchQuizzes();
+    } else {
+      fetchFilteredQuizzes(currentUser, currentFilter);
+    }
+    
     return newQuiz;
   } catch (error) {
     console.error('Error creating quiz:', error);
@@ -831,13 +863,13 @@ async function updateExistingQuiz() {
     
     const updatedQuiz = await response.json();
     
-    // Update local array
-    const quizIndex = quizzes.findIndex(q => q._id.toString() === editingQuiz._id);
-    if (quizIndex !== -1) {
-      quizzes[quizIndex] = updatedQuiz;
+    // Refresh feed with current filter
+    if (currentFilter === 'all') {
+      fetchQuizzes();
+    } else {
+      fetchFilteredQuizzes(currentUser, currentFilter);
     }
     
-    renderFeed();
     clearForm();
     
     // Reset button back to post mode
@@ -865,13 +897,13 @@ async function deleteQuiz(quizId) {
     
     if (!response.ok) throw new Error('Failed to delete quiz');
     
-    // Remove from local array
-    const quizIndex = quizzes.findIndex(q => q._id.toString() === quizId);
-    if (quizIndex !== -1) {
-      quizzes.splice(quizIndex, 1);
+    // Refresh feed with current filter
+    if (currentFilter === 'all') {
+      fetchQuizzes();
+    } else {
+      fetchFilteredQuizzes(currentUser, currentFilter);
     }
     
-    renderFeed();
     console.log('Quiz deleted successfully');
   } catch (error) {
     console.error('Error deleting quiz:', error);
@@ -898,6 +930,33 @@ function updateNames() {
   const p2 = document.getElementById('name-p2').textContent;
   document.getElementById('btn-name-p1').textContent = p1;
   document.getElementById('btn-name-p2').textContent = p2;
+}
+
+// ===== FILTER TOGGLE =====
+function setFilter(filter) {
+  currentFilter = filter;
+  
+  // Update button states
+  document.getElementById('filter-all').classList.toggle('active', filter === 'all');
+  document.getElementById('filter-asked').classList.toggle('active', filter === 'asked');
+  document.getElementById('filter-received').classList.toggle('active', filter === 'received');
+  
+  // Update feed title
+  const titleText = document.getElementById('feed-title-text');
+  if (filter === 'all') {
+    titleText.textContent = 'Quiz Feed';
+  } else if (filter === 'asked') {
+    titleText.textContent = 'My Questions';
+  } else if (filter === 'received') {
+    titleText.textContent = 'Questions for Me';
+  }
+  
+  // Fetch quizzes based on filter
+  if (filter === 'all') {
+    fetchQuizzes();
+  } else {
+    fetchFilteredQuizzes(currentUser, filter);
+  }
 }
 
 // ===== ASKER TOGGLE =====
@@ -966,7 +1025,18 @@ function clearForm() {
 function renderFeed() {
   const feed = document.getElementById('feed');
   if (quizzes.length === 0) {
-    feed.innerHTML = `<div class="empty-feed"><div class="big">💕</div>No questions yet — be the first to post one!</div>`;
+    let emptyMessage = 'No questions yet — be the first to post one!';
+    let emptyIcon = '💕';
+    
+    if (currentFilter === 'asked') {
+      emptyMessage = 'You haven\'t asked any questions yet — post one above!';
+      emptyIcon = '✍️';
+    } else if (currentFilter === 'received') {
+      emptyMessage = 'No questions asked for you yet!';
+      emptyIcon = '🎯';
+    }
+    
+    feed.innerHTML = `<div class="empty-feed"><div class="big">${emptyIcon}</div>${emptyMessage}</div>`;
     return;
   }
 
@@ -1065,7 +1135,12 @@ async function answer(id, chosenIdx) {
       console.error('Failed to save scores to database:', error);
     }
 
-    renderFeed();
+    // Refresh feed with current filter
+    if (currentFilter === 'all') {
+      fetchQuizzes();
+    } else {
+      fetchFilteredQuizzes(currentUser, currentFilter);
+    }
   } catch (error) {
     console.error('Failed to submit answer:', error);
   }
@@ -1094,6 +1169,9 @@ function submitUsername() {
     console.log(`Username "${username}" not recognized - defaulted to Player 1`);
   }
   
+  // Set current user
+  currentUser = selectedPlayer;
+  
   // Reorder profiles so logged-in user is on the left
   reorderProfiles(selectedPlayer);
   
@@ -1117,6 +1195,13 @@ function submitUsername() {
   setTimeout(() => {
     closeModal();
   }, 2000);
+  
+  // Refresh feed with current filter
+  if (currentFilter === 'all') {
+    fetchQuizzes();
+  } else {
+    fetchFilteredQuizzes(currentUser, currentFilter);
+  }
 }
 
 // ===== PROFILE REORDERING =====
@@ -1171,6 +1256,9 @@ function checkStoredUsername() {
     } else {
       selectedPlayer = 1;
     }
+    
+    // Set current user
+    currentUser = selectedPlayer;
     
     // Reorder profiles and set asker without showing modal
     reorderProfiles(selectedPlayer);
@@ -1267,8 +1355,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for stored username first
   checkStoredUsername();
   
-  // Load quizzes
-  await fetchQuizzes();
+  // Load quizzes with current filter
+  if (currentFilter === 'all') {
+    await fetchQuizzes();
+  } else {
+    await fetchFilteredQuizzes(currentUser, currentFilter);
+  }
   
   // Load scores from database
   try {
